@@ -1,5 +1,6 @@
 "use client";
 
+import "@/lib/storageMigration";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Claim, ContactDetails, FlowType, PersonName } from "@/lib/domain/types";
 
@@ -95,7 +96,7 @@ export function sampleDraft(flowType: FlowType): Partial<Draft> {
   };
 }
 
-const KEY = "dividendi:v1:draft";
+const KEY = "vendii:v1:draft";
 
 type Patch = Partial<Draft> | ((d: Draft) => Partial<Draft>);
 

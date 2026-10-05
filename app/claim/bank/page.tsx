@@ -36,7 +36,7 @@ export default function BankStep() {
         placeholder="10 digits" inputMode="numeric" error={tried ? errors.accountNumber : undefined} />
       <div className="banner navy">
         <b>We never hold your money</b>
-        Dividendi has no account in the payment chain. After you&apos;re paid, our 10% is collected by direct debit, and you&apos;re told the exact amount first.
+        Vendii has no account in the payment chain. After you&apos;re paid, our 10% is collected by direct debit, and you&apos;re told the exact amount first.
       </div>
     </WizardShell>
   );

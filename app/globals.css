@@ -1,9 +1,9 @@
-/* Dividendi. Brand: navy #295D8F, gold #C59F56, white. Type: Space Grotesk. */
+/* Vendii. Brand: Vendii Blue #295D8F, Vendii Gold #C59F56, white, Ink #17375A. Type: Space Grotesk. */
 :root {
   --navy-deep: #122135; --navy: #295D8F; --navy-light: #3E73A6;
   --gold: #C59F56; --gold-deep: #8A6A2E; --gold-bg: #F6EFDE;
   --paper: #FBFAF7; --surface: #FFFFFF; --surface-2: #F3F0E9;
-  --ink: #14263B; --ink-2: #4B5A6C; --ink-3: #7E8B9A;
+  --ink: #17375A; --ink-2: #4B5E73; --ink-3: #7E8B9A;
   --rule: rgba(20, 38, 59, .13); --rule-strong: rgba(20, 38, 59, .26); --shade: rgba(20, 38, 59, .05);
   --teal: #0F6E56; --teal-bg: #E3F0EC; --red: #A32D2D; --red-bg: #F8E7E6;
   --shadow: 0 1px 0 rgba(20, 38, 59, .06), 0 10px 30px -14px rgba(20, 38, 59, .30);
@@ -53,8 +53,8 @@ p { color: var(--ink-2); margin: 0 0 14px; max-width: 58ch; line-height: 1.55; }
 
 /* ---------- logo ---------- */
 .logo { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; }
-.logo img { display: block; width: auto; }
-.logo-word { font-weight: 700; letter-spacing: -.02em; color: var(--navy); }
+.logo svg { display: block; flex: none; }
+.logo-word { font-weight: 700; letter-spacing: -.02em; color: var(--ink); }
 .logo.on-dark .logo-word { color: #fff; }
 
 /* ---------- buttons ---------- */
@@ -337,5 +337,50 @@ textarea.input { min-height: 220px; line-height: 1.55; resize: vertical; }
 
 /* ---------- demo tools (mock mode only) ---------- */
 .demo-fab { position: fixed; right: 18px; bottom: 18px; z-index: 60; background: var(--ink); color: var(--paper); border-radius: 999px; padding: 10px 16px; font-size: 12.5px; font-weight: 600; box-shadow: var(--shadow); }
-.demo-panel { position: fixed; right: 18px; bottom: 66px; z-index: 61; width: 300px; background: var(--surface); border: 1px solid var(--rule); border-radius: 14px; box-shadow: var(--shadow); padding: 16px; }
+.demo-panel { position: fixed; right: 18px; bottom: 66px; z-index: 61; width: 300px; max-height: calc(100vh - 90px); overflow-y: auto; background: var(--surface); border: 1px solid var(--rule); border-radius: 14px; box-shadow: var(--shadow); padding: 16px; }
 .demo-panel .btn { width: 100%; justify-content: flex-start; margin-bottom: 8px; }
+
+/* ---------- admin portal ---------- */
+.subnav { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--rule); margin: -8px 0 26px; }
+.subnav a { padding: 10px 12px; font-size: 14px; font-weight: 500; color: var(--ink-3); border-bottom: 2px solid transparent; margin-bottom: -1px; text-decoration: none; }
+.subnav a[data-on="true"] { color: var(--ink); border-bottom-color: var(--navy); }
+.subnav a:hover { color: var(--ink); }
+.subnav .who { margin-left: auto; align-self: center; font-size: 12.5px; color: var(--ink-3); }
+
+.tbl-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 12px; background: var(--surface); }
+.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.tbl th { text-align: left; font-weight: 600; font-size: 12px; color: var(--ink-3); padding: 10px 12px; border-bottom: 1px solid var(--rule); white-space: nowrap; background: var(--surface-2); }
+.tbl td { padding: 10px 12px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+.tbl tr:last-child td { border-bottom: 0; }
+.tbl tr.sel td { background: rgba(41, 93, 143, .06); }
+.tbl td.num, .tbl th.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tbl a { color: var(--ink); font-weight: 600; text-decoration: none; }
+.tbl a:hover { text-decoration: underline; }
+.tbl .sub { font-size: 12px; color: var(--ink-3); margin-top: 2px; }
+
+.sla { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.sla.overdue { background: var(--red-bg); color: var(--red); }
+.sla.today { background: var(--gold-bg); color: var(--gold-deep); }
+.sla.soon { background: rgba(41, 93, 143, .1); color: var(--navy); }
+.sla.ok, .sla.none { background: var(--surface-2); color: var(--ink-3); }
+
+.filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+.filters .chip[aria-pressed="true"] { background: var(--navy); color: #fff; border-color: var(--navy); }
+.filters select, .inline-select { height: 36px; border-radius: 8px; border: 1px solid var(--rule-strong); background: var(--surface); color: var(--ink); padding: 0 10px; font: inherit; font-size: 13.5px; }
+.filters .input { height: 36px; min-height: 0; max-width: 240px; font-size: 13.5px; }
+
+.bulkbar { position: sticky; top: 8px; z-index: 5; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; background: var(--navy); color: #fff; border-radius: 12px; padding: 10px 14px; margin-bottom: 12px; font-size: 13.5px; }
+.bulkbar .btn.quiet { background: rgba(255, 255, 255, .14); color: #fff; }
+.bulkbar .btn.quiet:hover { background: rgba(255, 255, 255, .24); }
+.bulkbar select { height: 34px; border-radius: 8px; border: 0; padding: 0 8px; font: inherit; }
+
+.tri { display: inline-flex; border: 1px solid var(--rule-strong); border-radius: 8px; overflow: hidden; }
+.tri button { padding: 5px 10px; font-size: 12.5px; color: var(--ink-2); border-right: 1px solid var(--rule); }
+.tri button:last-child { border-right: 0; }
+.tri button[aria-pressed="true"] { background: var(--navy); color: #fff; }
+.req-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--rule); font-size: 14px; }
+.req-row:last-child { border-bottom: 0; }
+.mini-bar { height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; min-width: 60px; }
+.mini-bar > span { display: block; height: 100%; background: var(--teal, #2f7d6d); }
+.recon-head { display: flex; gap: 8px; align-items: baseline; margin: 18px 0 8px; }
+.recon-head h3 { margin: 0; }

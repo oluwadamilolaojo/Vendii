@@ -74,7 +74,7 @@ export function SignInForm() {
   return (
     <div className="wizshell">
       <aside className="wiz-left">
-        <Link href="/" className="wiz-mark" aria-label="Dividendi home"><Logo height={30} onDark /></Link>
+        <Link href="/" className="wiz-mark" aria-label="Vendii home"><Logo height={30} onDark /></Link>
         <h2 style={{ color: "#fff", fontSize: 24, maxWidth: "18ch" }}>
           {fromClaim ? "One quick check before we search." : "Welcome back."}
         </h2>

@@ -3,7 +3,7 @@ export type DataSource = "mock" | "firebase";
 export const DATA_SOURCE: DataSource =
   process.env.NEXT_PUBLIC_DATA_SOURCE === "firebase" ? "firebase" : "mock";
 
-export const OPS_EMAILS: string[] = (process.env.NEXT_PUBLIC_OPS_EMAILS ?? "ops@dividendi.ng")
+export const OPS_EMAILS: string[] = (process.env.NEXT_PUBLIC_OPS_EMAILS ?? "ops@vendii.ng")
   .split(",")
   .map((s) => s.trim().toLowerCase())
   .filter(Boolean);

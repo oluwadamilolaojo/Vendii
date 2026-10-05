@@ -57,7 +57,7 @@ export default function Home() {
         <div><div className="k">10%</div><div className="v">Maximum fee, debited only after you&apos;re paid</div></div>
       </section>
       <p className="foot-note tiny">
-        Dividendi acts on a limited power of attorney scoped to each claim. You can claim directly from any registrar at no
+        Vendii acts on a limited power of attorney scoped to each claim. You can claim directly from any registrar at no
         cost, and we tell you how before you sign.
       </p>
     </>

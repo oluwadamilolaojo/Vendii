@@ -1,6 +1,6 @@
-# Dividendi
+# Vendii
 
-Recovers unclaimed dividends for Nigerian shareholders and estates. The shareholder gives us every spelling of their name, we search the registers, they sign a limited power of attorney and a NIBSS fee mandate, a person here reviews the pack, we file and chase, and the registrar pays the shareholder directly. We debit 10% of what arrived. Dividendi never holds client money.
+Recovers unclaimed dividends for Nigerian shareholders and estates. The shareholder gives us every spelling of their name, we search the registers, they sign a limited power of attorney and a NIBSS fee mandate, a person here reviews the pack, we file and chase, and the registrar pays the shareholder directly. We debit 10% of what arrived. Vendii never holds client money.
 
 **Language and stack.** TypeScript throughout. Next.js 14 (App Router) with React 18 for the pages, Next.js route handlers for the server, and Firebase for sign-in (Auth), data (Firestore) and uploads (Storage). It deploys to Vercel as-is. Font is Space Grotesk; brand colours navy `#295D8F` and gold `#C59F56`.
 
@@ -18,9 +18,9 @@ npm run typecheck
 npm run build
 ```
 
-In mock mode the one-time code is always `123456`. Sign in with any Nigerian mobile number or email; `ops@dividendi.ng` signs in as staff. The **Demo** button (bottom right, mock mode only) fills sample details, loads a claim history in every state, signs you in as ops, and resets everything.
+In mock mode the one-time code is always `123456`. Sign in with any Nigerian mobile number or email. Four demo staff are built in: `ops@vendii.ng` (admin), `reviewer@vendii.ng`, `agent@vendii.ng` and `finance@vendii.ng`. The **Demo** button (bottom right, mock mode only) fills sample details, loads a shareholder's claim history, loads admin demo data (22 claims across 10 registrars in every state), signs you in as any role, and resets everything.
 
-A five-minute walkthrough: start a claim from the landing page, use Demo to fill sample details, search, file, then Demo, sign in as ops, approve, record a receipt, mark it paid and debit the fee. Sign back in with the same phone number to see the shareholder's timeline update.
+Two walkthroughs. **Shareholder:** start a claim from the landing page, use Demo to fill sample details, search, file. **Admin portal:** Demo, Load admin demo data, then switch between the four roles from the same panel and watch the rooms and buttons change.
 
 ## How it's put together
 
@@ -32,7 +32,11 @@ app/                    pages
   claim/                the wizard: name, variants, identity, [authority], bank,
                         search, results, authorize (POA), mandate, filed
   dashboard/            shareholder tracking and claim timelines
-  ops/                  staff queue, pack review, chase messages, registrar forms
+  ops/                  the admin portal: queue, claim review, registrars, money,
+                        team, audit log, settings
+  api/claims/bulk/      the same staff action on many claims
+  api/ops/filing/[id]/  audited view of a filing's ID documents
+  api/admin/            registrar edits, settings, team roles
   forms/                fill every registrar's mandate form from one set of details
   api/search/           register search (server)
   api/claims/file/      files a claim pack (server)
@@ -74,9 +78,38 @@ draft ─▶ review ─▶ submitted ─▶ chasing ─▶ collected ─▶ paid
 
 **Name matching** strips accents and punctuation and collapses spacing, so "A. B. Ogunyemi", "A.B. OGUNYEMI" and "a b ogunyemi" meet. Every register entry stores `holderNameNorm`, so search is an exact lookup on the normalised spelling. Re-run `npm run seed` (or re-ingest) if `normalizeName()` ever changes.
 
+## Admin portal
+
+Six rooms under `/ops`, each shown only to the roles that can use it. The server enforces the same rules, so hiding a button is never the only protection.
+
+**Queue.** Opens on "mine" when you have assigned work, otherwise everything open, overdue first. Every claim has an owner, the time it entered its current state, and a deadline in working days (Lagos time, weekends skipped). A chase restarts the clock. A shareholder's check-in request pulls the deadline in to the next working day. Claims chasing longer than the escalation threshold are flagged with the registrar's named contact. Bulk actions: take, assign, and approve. Bulk approve covers confirmed matches only; weaker matches have to be opened and approved one at a time.
+
+**Registrars.** All 21, ranked by overdue work, with open value, oldest open claim, median days from filing to payment, acceptance rate and rejection reasons. Each has an acceptance matrix (accepts our POA, accepts email, wet-ink signature, bank stamp, affidavit for name variants, notarised POA) where every answer is yes, no or unknown. It starts unknown and fills in as registrars confirm things. This is the evidence base for SEC and for training new staff.
+
+**Money.** Fees from the moment a registrar pays until the money is on our statement: to debit, in progress, failed (with a retry date three working days out), collected, or waived. A failed debit tells the shareholder nothing was taken and when we'll retry. Bulk debit requests. Ledger export as CSV. Reconciliation: drop in the fee account's bank statement as CSV and each credit is matched to a fee by its `VND-` reference, or by exact amount if the bank dropped it. It lists anything marked collected that never reached the statement, which is the gap that costs money.
+
+**Team.** Give, change or remove staff roles. Takes effect at once (Firebase revokes the old session). You can't change your own role.
+
+**Audit log.** Every claim change, every view of someone's ID documents, every forms download, registrar edit, role change and settings change. On Firebase each entry is written in the same transaction as the change, and no client can write or edit it. Filter by person, action or claim; export as CSV.
+
+**Settings.** The SLA policy, in working days. Not the fee rate: that's written into the mandate each shareholder signs, so changing it is a legal change, not a setting. To charge less on one claim, waive the fee; that's logged with a reason.
+
+### Roles
+
+| Role | Can |
+|---|---|
+| Agent | Work claims: record receipts, write chases, take unassigned claims or let go of their own. Sees ID documents. |
+| Reviewer | Everything an agent can, plus approve, reject, raise exceptions, assign anyone's work, edit registrar requirements. |
+| Finance | Record registrar payments, request and record fee debits, retry, reconcile. Can't approve claims and never sees ID documents. |
+| Admin | Everything, plus waiving fees, the team, the audit log and settings. |
+
+Two rules hold whatever the role. Whoever approved a claim can't debit or waive its fee. And staff never read filings or ID documents straight from the database: `/api/ops/filing` logs each view and returns photos, signatures and probate documents as links that expire after 15 minutes. Opening a claim doesn't load them; the reviewer clicks "Show ID documents", so the log records deliberate views, not every page load.
+
+The old single "ops" role still works and is read as admin.
+
 ## Registrar forms
 
-Every registrar has its own e-dividend mandate form. Dividendi fills them from one set of details: the shareholder's name, BVN, bank, address, contact details, passport photo and signature go onto the right boxes of each registrar's form, and the companies they hold are ticked. Several companies on one registrar share one form.
+Every registrar has its own e-dividend mandate form. Vendii fills them from one set of details: the shareholder's name, BVN, bank, address, contact details, passport photo and signature go onto the right boxes of each registrar's form, and the companies they hold are ticked. Several companies on one registrar share one form.
 
 Two ways in:
 
@@ -134,9 +167,9 @@ Known gaps in the forms themselves:
    ```bash
    npm run seed                                   # demo register entries
    npm run dev                                    # sign in once as yourself
-   npm run set-role -- you@dividendi.ng ops       # or your +234 number
+   npm run set-role -- you@vendii.ng admin "Your Name"   # or your +234 number
    ```
-   Reload the app and the ops screens open for you.
+   Reload the app and the Admin link appears. From then on, add the rest of the team from Admin, Team; the script is only needed for the first admin.
 
 ## Putting it on Vercel
 
@@ -144,15 +177,15 @@ To show the demo without any backend, deploy with `NEXT_PUBLIC_DATA_SOURCE=mock`
 
 1. **Put the code on GitHub.**
    ```bash
-   git init && git add . && git commit -m "Dividendi"
+   git init && git add . && git commit -m "Vendii"
    git branch -M main
-   git remote add origin https://github.com/<you>/dividendi.git
+   git remote add origin https://github.com/<you>/vendii.git
    git push -u origin main
    ```
    `.gitignore` already keeps `.env.local` and service account files out.
 2. **Import it.** On vercel.com, Add New, Project, pick the repo. Vercel detects Next.js; leave the build settings alone.
 3. **Add the environment variables** before the first deploy. Open Environment Variables and paste the whole contents of `.env.local`; Vercel splits it into keys. Check `NEXT_PUBLIC_DATA_SOURCE` is `firebase` and that `FIREBASE_PRIVATE_KEY` still has its `\n` sequences.
-4. **Deploy**, then copy your URL (for example `dividendi.vercel.app`).
+4. **Deploy**, then copy your URL (for example `vendii.vercel.app`).
 5. **Authorise the domain in Firebase.** Authentication, Settings, Authorized domains, add the Vercel URL and any custom domain. Without this, phone codes and email links fail with an unauthorised-domain error.
 6. Every push to `main` now redeploys. Other branches get preview URLs; add those to Authorized domains too if you want to sign in on them.
 
@@ -160,9 +193,14 @@ If you change an environment variable later, redeploy from the Deployments tab. 
 
 ## Not built yet
 
+- **Sending chase emails.** Staff messages are queued in `outboundMessages`; nothing sends them yet. Until a sender exists, "Log as sent" records the chase and restarts the clock, and the screen tells staff to send it from the team inbox. This is the most important gap in the portal.
+- **The mandate provider's webhook.** Today finance records a debit's success or failure by hand. When Fincra (or similar) is connected, its webhook should call the same `runClaimAction` with `debitFee` or `failDebit`, under a system actor, so the audit log shows the provider rather than a person.
+- **Public holidays** in the SLA clock. Expect a few false overdues around them.
+- **Pagination.** The queue and money room load up to 1,000 claims, and the audit page the latest 1,000 entries. Fine for the pilot; past that they need server-side paging.
+
+
 - **Register data.** `registerEntries` holds the demo seed only. It needs an ingestion job for the SEC unclaimed dividend portal and registrar lists, with a `source` and refresh date per entry.
 - **The mandate provider.** Mandates are stored as `pending` with the shareholder's acknowledgements. Creating the real NIBSS mandate (Fincra or similar) and receiving debit webhooks belongs in a new route under `app/api` that applies the `debitFee` action when the provider confirms. Today ops records it by hand.
-- **Sending chase emails.** Ops messages land in `outboundMessages` as `queued`. A sender (a Vercel cron route or a Firestore-triggered Cloud Function) needs to send them and mark them `sent`.
 - **WhatsApp codes.** Firebase Auth sends SMS only. WhatsApp through a Nigerian provider such as Termii means a small route that sends and checks the code, then signs the user in with a Firebase custom token. The sign-in screen already shows the WhatsApp option when the auth service says it's available.
 - **Attaching forms automatically.** Forms are generated on demand from the ops screen. Saving a copy to Storage when a claim is approved, so the filed pack is frozen, is a small next step.
 - **Fee notice before debit.** The timeline records it; the SMS or email itself isn't sent yet.

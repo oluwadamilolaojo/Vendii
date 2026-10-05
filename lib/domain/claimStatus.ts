@@ -62,3 +62,16 @@ export const STATUS_TONE: Record<ClaimStatus, Tone> = {
   paid: "teal",
   rejected: "plain",
 };
+
+/** What staff call each state. The shareholder labels above are written for the shareholder. */
+export const STAFF_STATUS_LABEL: Record<ClaimStatus, string> = {
+  draft: "Not filed",
+  review: "In review",
+  submitted: "Filed, awaiting receipt",
+  chasing: "Chasing",
+  exception: "Waiting on shareholder",
+  hold: "On hold",
+  collected: "Registrar paid",
+  paid: "Closed, paid",
+  rejected: "Closed, rejected",
+};

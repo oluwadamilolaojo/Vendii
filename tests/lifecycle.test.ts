@@ -37,10 +37,12 @@ describe("claim lifecycle on the mock repository", () => {
     const zenith = filed.find((c) => c.company === "Zenith Bank")!;
     await expect(repo.ops.approve(zenith.id)).rejects.toThrow(/staff/);
 
-    mockSignInAs("ops@dividendi.ng", "email");
+    mockSignInAs("ops@vendii.ng", "email");
     await repo.ops.approve(zenith.id);
     await repo.ops.recordReceipt(zenith.id, "VR/DIV/1");
     await expect(repo.ops.debitFee(zenith.id)).rejects.toThrow();
+    // The approver can't take the fee. Finance does.
+    mockSignInAs("finance@vendii.ng", "email");
     await repo.ops.recordCollection(zenith.id);
     const paid = await repo.ops.debitFee(zenith.id);
 
@@ -53,7 +55,7 @@ describe("claim lifecycle on the mock repository", () => {
   it("routes an exception back to the shareholder and resumes chasing after the fix", async () => {
     mockSignInAs("+2348031234567", "phone");
     const uba = (await fileAll()).find((c) => c.company === "United Bank for Africa")!;
-    mockSignInAs("ops@dividendi.ng", "email");
+    mockSignInAs("ops@vendii.ng", "email");
     await repo.ops.approve(uba.id);
     await repo.ops.recordReceipt(uba.id, "AP/1");
     const ex = await repo.ops.raiseException(uba.id, "Name mismatch");
@@ -76,14 +78,14 @@ describe("claim lifecycle on the mock repository", () => {
   it("logs a shareholder check-in once and clears it when ops chases", async () => {
     mockSignInAs("+2348031234567", "phone");
     const c = (await fileAll()).find((x) => x.company === "Dangote Cement")!;
-    mockSignInAs("ops@dividendi.ng", "email");
+    mockSignInAs("ops@vendii.ng", "email");
     await repo.ops.approve(c.id);
     mockSignInAs("+2348031234567", "phone");
     await repo.requestChase(c.id);
     const twice = await repo.requestChase(c.id);
     expect(twice.chaseRequested).toBe(true);
     expect(twice.events.filter((e) => e.title === "You requested a status check")).toHaveLength(1);
-    mockSignInAs("ops@dividendi.ng", "email");
+    mockSignInAs("ops@vendii.ng", "email");
     const chased = await repo.ops.sendChase(c.id, { to: "x@y.com", subject: "s", body: "b" });
     expect(chased.chaseRequested).toBe(false);
   });

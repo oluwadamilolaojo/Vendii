@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { isStaff } from "@/lib/domain/permissions";
 import { usePathname, useRouter } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { useAuth } from "@/lib/auth/context";
@@ -11,11 +12,11 @@ export function AppBar() {
   const pathname = usePathname();
   const router = useRouter();
   const links = [{ href: "/dashboard", label: "My claims" }, { href: "/forms", label: "Registrar forms" }];
-  if (session?.role === "ops") links.push({ href: "/ops", label: "Ops console" });
+  if (isStaff(session?.role)) links.push({ href: "/ops", label: "Admin" });
 
   return (
     <header className="appbar">
-      <Link href="/" aria-label="Dividendi home"><Logo height={22} /></Link>
+      <Link href="/" aria-label="Vendii home"><Logo height={22} /></Link>
       <nav>
         {links.map((l) => (
           <Link key={l.href} href={l.href} className="navlink" data-on={pathname.startsWith(l.href)}>{l.label}</Link>

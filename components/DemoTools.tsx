@@ -4,6 +4,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { mockSignInAs } from "@/lib/auth/mock";
 import { DATA_SOURCE, MOCK_OTP, OPS_EMAILS } from "@/lib/config";
+import { DEMO_STAFF } from "@/lib/auth/mockStaff";
+import { ROLE_LABEL } from "@/lib/domain/permissions";
 import { mockRepository } from "@/lib/data";
 import { sampleDraft, useDraft } from "@/lib/draft";
 
@@ -36,11 +38,17 @@ function DemoToolsPanel() {
           <button className="btn quiet sm" onClick={() => { mockSignInAs("+2348031234567", "phone"); mockRepository.loadSampleHistory(); go("/dashboard"); }}>
             Sign in with sample claim history
           </button>
-          <button className="btn quiet sm" onClick={() => { mockSignInAs(OPS_EMAILS[0] ?? "ops@dividendi.ng", "email"); go("/ops"); }}>
-            Sign in as ops staff
+          <div className="tiny" style={{ marginTop: 6 }}>Admin portal</div>
+          <button className="btn quiet sm" onClick={() => { mockRepository.loadOpsDemo(); mockSignInAs(OPS_EMAILS[0] ?? "ops@vendii.ng", "email"); go("/ops"); }}>
+            Load admin demo data
           </button>
+          {DEMO_STAFF.map((m) => (
+            <button key={m.id} className="btn quiet sm" onClick={() => { mockSignInAs(m.identifier, "email"); go(m.role === "finance" ? "/ops/money" : "/ops"); }}>
+              Sign in as {ROLE_LABEL[m.role].toLowerCase()} ({m.name.split(" ")[0]})
+            </button>
+          ))}
           <button className="btn quiet sm" onClick={() => {
-            Object.keys(window.localStorage).filter((k) => k.startsWith("dividendi:")).forEach((k) => window.localStorage.removeItem(k));
+            Object.keys(window.localStorage).filter((k) => k.startsWith("vendii:")).forEach((k) => window.localStorage.removeItem(k));
             window.location.href = "/";
           }}>
             Reset all demo data
