@@ -27,7 +27,7 @@ export function WizardShell({ phase, stepLabel, backHref, wide, footer, children
   return (
     <div className="wizshell">
       <aside className="wiz-left">
-        <Link href="/" className="wiz-mark" aria-label="Dividendi home"><Logo height={30} onDark /></Link>
+        <Link href="/" className="wiz-mark" aria-label="Vendii home"><Logo height={30} onDark /></Link>
         <ol className="wiz-phase" aria-label="Progress">
           {PHASES.map((p, i) => {
             const s = i < phase ? "done" : i === phase ? "now" : "wait";
