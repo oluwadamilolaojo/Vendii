@@ -8,7 +8,11 @@ import type { Claim, ContactDetails, FlowType, PersonName } from "@/lib/domain/t
  *   registerEntries/{id}   server only. Ingested register data.
  *   filings/{id}           one per filing. Owner and ops can read. Server writes.
  *   claims/{id}            owner and ops can read. Server writes.
- *   feeDebits/{claimId}    one per claim, id = claim id, so a second debit fails.
+ *   feeDebits/{claimId}    fee ledger, one per claim, mirrors claim.fee plus every attempt.
+ *   auditLog/{id}          who did what. Written in the same transaction as the change.
+ *   registrars/{id}        contacts and the acceptance matrix, keyed by form template id.
+ *   staff/{uid}            the team directory. Roles themselves live in Auth custom claims.
+ *   config/settings        SLA policy.
  *   outboundMessages/{id}  chase emails waiting for a sender. Ops can read.
  *
  * Storage: identity-photos/{uid}/, signatures/{uid}/, estate-documents/{uid}/
@@ -19,7 +23,13 @@ export const COL = {
   claims: "claims",
   feeDebits: "feeDebits",
   outbound: "outboundMessages",
+  audit: "auditLog",
+  registrars: "registrars",
+  staff: "staff",
+  config: "config",
 } as const;
+
+export const SETTINGS_DOC = "settings";
 
 export interface RegisterEntryDoc {
   company: string;
@@ -99,6 +109,7 @@ const CLAIM_FIELDS: (keyof Claim)[] = [
   "registerEntryId", "filingId", "ownerId", "ownerName", "company", "ticker", "registrar", "units", "years",
   "amount", "pocket", "confidence", "matchedOn", "matchNote", "status", "exceptionReason", "ref",
   "submittedOn", "paidOn", "chaseRequested", "events",
+  "assigneeId", "assigneeName", "stateSince", "dueAt", "approvedBy", "submittedAt", "fee",
 ];
 
 /** Firestore data to a Claim. Drops timestamps and anything else we didn't put there on purpose. */

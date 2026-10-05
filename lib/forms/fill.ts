@@ -160,8 +160,8 @@ export async function fillForms(profile: FormProfile, holdings: Holding[], image
     byRegistrar.set(h.registrarId, [...(byRegistrar.get(h.registrarId) ?? []), h.company]);
   }
   const out = await PDFDocument.create();
-  out.setTitle("Dividendi e-mandate forms");
-  out.setCreator("Dividendi");
+  out.setTitle("Vendii e-mandate forms");
+  out.setCreator("Vendii");
   const forms: FilledForm[] = [];
   for (const [id, companies] of byRegistrar) forms.push(await fillOnto(out, templateById(id)!, profile, companies, images));
   return { pdf: await out.save(), forms };

@@ -1,3 +1,4 @@
+import "@/lib/storageMigration";
 import {
   RecaptchaVerifier,
   isSignInWithEmailLink,
@@ -12,8 +13,9 @@ import {
 import { fbAuth } from "@/lib/firebase/client";
 import type { Session } from "@/lib/domain/types";
 import type { AuthService } from "./types";
+import { normaliseRole } from "@/lib/domain/permissions";
 
-const EMAIL_KEY = "dividendi:emailForSignIn";
+const EMAIL_KEY = "vendii:emailForSignIn";
 
 let verifier: RecaptchaVerifier | null = null;
 let pending: { phone: string; confirmation: ConfirmationResult } | null = null;
@@ -45,7 +47,8 @@ async function toSession(user: User | null, forceRefresh = false): Promise<Sessi
     userId: user.uid,
     identifier: user.phoneNumber ?? user.email ?? "",
     channel: user.phoneNumber ? "phone" : "email",
-    role: token.claims.role === "ops" ? "ops" : "shareholder",
+    role: normaliseRole(token.claims.role),
+    name: typeof token.claims.name === "string" ? token.claims.name : user.displayName ?? undefined,
   };
 }
 

@@ -1,10 +1,12 @@
-import { MOCK_OTP, OPS_EMAILS } from "@/lib/config";
+import "@/lib/storageMigration";
+import { MOCK_OTP } from "@/lib/config";
+import { findMockStaff } from "./mockStaff";
 import type { Session } from "@/lib/domain/types";
 import { delay } from "@/lib/util";
 import type { AuthService } from "./types";
 
-const KEY = "dividendi:v1:session";
-const EVT = "dividendi:auth";
+const KEY = "vendii:v1:session";
+const EVT = "vendii:auth";
 
 function hash(s: string): string {
   let h = 0;
@@ -25,12 +27,10 @@ export function readMockSession(): Session | null {
 /** Same identifier always maps to the same user, so claims survive signing out and back in. */
 export function mockSignInAs(identifier: string, channel: "phone" | "email"): Session {
   const id = identifier.trim().toLowerCase();
-  const session: Session = {
-    userId: "mock-" + hash(id),
-    identifier: identifier.trim(),
-    channel,
-    role: channel === "email" && OPS_EMAILS.includes(id) ? "ops" : "shareholder",
-  };
+  const staff = findMockStaff(identifier);
+  const session: Session = staff
+    ? { userId: staff.id, identifier: identifier.trim(), channel, role: staff.role, name: staff.name }
+    : { userId: "mock-" + hash(id), identifier: identifier.trim(), channel, role: "shareholder" };
   window.localStorage.setItem(KEY, JSON.stringify(session));
   window.dispatchEvent(new Event(EVT));
   return session;

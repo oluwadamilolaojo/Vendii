@@ -1,7 +1,9 @@
 import "server-only";
 import { NextResponse } from "next/server";
 import { adminAuth } from "@/lib/firebase/admin";
-import type { Role } from "@/lib/domain/types";
+import { PermissionError } from "@/lib/domain/authorize";
+import { can, isStaff, normaliseRole, type Permission } from "@/lib/domain/permissions";
+import type { Actor, Role } from "@/lib/domain/types";
 
 export class HttpError extends Error {
   constructor(public status: number, message: string) {
@@ -12,7 +14,10 @@ export class HttpError extends Error {
 export interface Caller {
   uid: string;
   role: Role;
+  name: string;
 }
+
+export const actorOf = (c: Caller): Actor => ({ id: c.uid, name: c.name, role: c.role });
 
 /** Every route starts here. The role comes from the verified token's custom claim, never from the request body. */
 export async function caller(req: Request): Promise<Caller> {
@@ -21,7 +26,8 @@ export async function caller(req: Request): Promise<Caller> {
   if (!token) throw new HttpError(401, "Sign in to continue.");
   try {
     const decoded = await adminAuth().verifyIdToken(token, true);
-    return { uid: decoded.uid, role: decoded.role === "ops" ? "ops" : "shareholder" };
+    const name = typeof decoded.name === "string" && decoded.name ? decoded.name : decoded.email ?? decoded.phone_number ?? decoded.uid;
+    return { uid: decoded.uid, role: normaliseRole(decoded.role), name };
   } catch (e) {
     // Only a bad or expired token is the user's problem. Anything else (missing server keys,
     // Firebase unreachable) is ours and must surface as a logged 500, not a sign-in loop.
@@ -31,8 +37,9 @@ export async function caller(req: Request): Promise<Caller> {
   }
 }
 
-export function requireOps(c: Caller): void {
-  if (c.role !== "ops") throw new HttpError(403, "Only Dividendi staff can do that.");
+export function requireStaff(c: Caller, p?: Permission): void {
+  if (!isStaff(c.role)) throw new HttpError(403, "Only Vendii staff can do that.");
+  if (p && !can(c.role, p)) throw new HttpError(403, "Your role doesn't allow that. Ask an admin.");
 }
 
 /** Wraps a handler so thrown errors become JSON the UI can show as-is. */
@@ -42,6 +49,7 @@ export function handle(fn: (req: Request, ctx: { params: Record<string, string> 
       return NextResponse.json(await fn(req, ctx));
     } catch (e) {
       if (e instanceof HttpError) return NextResponse.json({ error: e.message }, { status: e.status });
+      if (e instanceof PermissionError) return NextResponse.json({ error: e.message }, { status: 403 });
       // Domain rule violations (bad transitions, missing reasons) are plain Errors with no code:
       // the caller's problem, shown as-is. Firebase and gRPC failures carry a code: ours, logged.
       const infra = !(e instanceof Error) || (e as { code?: unknown }).code !== undefined;

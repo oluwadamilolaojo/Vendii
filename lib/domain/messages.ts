@@ -25,6 +25,6 @@ export function buildChaseMessage(c: Claim): OutboundMessage {
       `${c.years} dividends on ${c.units.toLocaleString("en-NG")} units of ${c.company}.\n\n` +
       `${opening} Please confirm the current status and tell us of any outstanding requirements.\n\n` +
       `Our client's authority is scoped strictly to this claim and does not extend to any other action on the account.\n\n` +
-      `Thank you,\nDividendi, on behalf of ${c.ownerName}`,
+      `Thank you,\nVendii, on behalf of ${c.ownerName}`,
   };
 }

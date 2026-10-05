@@ -1,12 +1,18 @@
 rules_version = '2';
 
-// Clients never write to Firestore. Every change goes through the Next.js routes in
-// app/api, which run as the service account and enforce the claim state machine.
-// These rules only decide who can read what.
+// Clients never write to Firestore. Every change goes through the Next.js routes in app/api,
+// which run as the service account, check the role, apply the claim rules and write the audit
+// log in the same transaction. These rules only decide who can read what.
+//
+// Roles live in the Auth custom claim `role`: agent, reviewer, finance, admin. The old single
+// role "ops" is still read as admin.
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
-    function isOps() { return signedIn() && request.auth.token.role == 'ops'; }
+    function role() { return signedIn() ? request.auth.token.role : null; }
+    function isAdmin() { return role() in ['admin', 'ops']; }
+    function isStaff() { return role() in ['agent', 'reviewer', 'finance', 'admin', 'ops']; }
+    function isFinance() { return role() == 'finance' || isAdmin(); }
     function owns(data) { return signedIn() && data.ownerId == request.auth.uid; }
 
     // Register data is only reachable through /api/search, which needs a name to match.
@@ -14,24 +20,45 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // BVN, NIN, bank details and the signed authority. Owner and staff only.
+    // BVN, NIN, bank details and the signed authority. The owner reads their own. Staff go
+    // through /api/ops/filing, which logs every view and returns 15-minute document links.
     match /filings/{id} {
-      allow read: if owns(resource.data) || isOps();
+      allow read: if owns(resource.data);
       allow write: if false;
     }
 
     match /claims/{id} {
-      allow read: if owns(resource.data) || isOps();
+      allow read: if owns(resource.data) || isStaff();
       allow write: if false;
     }
 
     match /feeDebits/{claimId} {
-      allow read: if owns(resource.data) || isOps();
+      allow read: if owns(resource.data) || isFinance();
       allow write: if false;
     }
 
     match /outboundMessages/{id} {
-      allow read: if isOps();
+      allow read: if isStaff();
+      allow write: if false;
+    }
+
+    match /registrars/{id} {
+      allow read: if isStaff();
+      allow write: if false;
+    }
+
+    match /staff/{uid} {
+      allow read: if isStaff();
+      allow write: if false;
+    }
+
+    match /config/{id} {
+      allow read: if isStaff();
+      allow write: if false;
+    }
+
+    match /auditLog/{id} {
+      allow read: if isAdmin();
       allow write: if false;
     }
 

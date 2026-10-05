@@ -1,12 +1,14 @@
 import { collection, doc, getDoc, getDocs, limit, orderBy, query, where } from "firebase/firestore";
-import { getDownloadURL, ref, uploadBytes, uploadString } from "firebase/storage";
+import { ref, uploadBytes, uploadString } from "firebase/storage";
 import { firebaseAuth } from "@/lib/auth/firebase";
 import { fbAuth, fbDb, fbStorage } from "@/lib/firebase/client";
 import type { ClaimAction } from "@/lib/domain/actions";
 import { postForForms } from "@/lib/forms/client";
-import type { Claim, Filing } from "@/lib/domain/types";
-import { COL, claimFromData, type FilingDoc, type FilingPayload } from "./firestoreShape";
-import type { Repository } from "./repository";
+import { withDefaults } from "@/lib/domain/registrarDesk";
+import { mergeSettings } from "@/lib/domain/settings";
+import type { AuditEntry, Claim, Filing, RegistrarProfile, Settings, StaffMember } from "@/lib/domain/types";
+import { COL, SETTINGS_DOC, claimFromData, type FilingPayload } from "./firestoreShape";
+import type { BulkResult, Repository } from "./repository";
 
 function uid(): string {
   const u = fbAuth().currentUser;
@@ -37,14 +39,6 @@ async function uploadDataUrl(path: string, dataUrl: string): Promise<string> {
   return path;
 }
 
-async function url(path: string | null | undefined): Promise<string | null> {
-  if (!path) return null;
-  try {
-    return await getDownloadURL(ref(fbStorage(), path));
-  } catch {
-    return null;
-  }
-}
 
 function byNewest(a: { t: number }, b: { t: number }) {
   return b.t - a.t;
@@ -114,31 +108,18 @@ export const firebaseRepository: Repository = {
 
   ops: {
     async listAll() {
-      const snap = await getDocs(query(collection(fbDb(), COL.claims), orderBy("updatedAt", "desc"), limit(500)));
+      const snap = await getDocs(query(collection(fbDb(), COL.claims), orderBy("updatedAt", "desc"), limit(1000)));
       return snap.docs.map((d) => claimFromData(d.id, d.data()));
     },
 
-    async getFiling(filingId) {
-      const d = await getDoc(doc(fbDb(), COL.filings, filingId));
-      if (!d.exists()) return null;
-      const r = d.data() as FilingDoc;
-      const a = r.administrator;
-      const filing: Filing = {
-        id: d.id, flowType: r.flowType, name: r.name, variants: r.variants ?? [],
-        bvn: r.bvn, nin: r.nin, chn: r.chn, address: r.address, contact: r.contact ?? null,
-        bankName: r.bankName, accountNumber: r.accountNumber,
-        photoUrl: await url(r.photoPath),
-        signatureUrl: await url(r.poa?.signaturePath),
-        administrator: a ? {
-          name: a.name, relationship: a.relationship, phone: a.phone, email: a.email, address: a.address,
-          photoUrl: await url(a.photoPath),
-          probateDoc: (await url(a.probateDocPath)) ?? a.probateDocName,
-        } : null,
-        createdAt: r.createdLabel,
-      };
-      return filing;
-    },
+    // Through the server, so the view is audited and documents come back as 15-minute links.
+    getFiling: (filingId) => api<Filing>(`/api/ops/filing/${encodeURIComponent(filingId)}`, {}).catch((e) => {
+      if (/doesn't exist/.test(String(e?.message))) return null;
+      throw e;
+    }),
 
+    act: (id, action) => act(id, action),
+    bulk: (ids, action) => api<BulkResult>("/api/claims/bulk", { ids, action }),
     approve: (id) => act(id, { type: "approve" }),
     recordReceipt: (id, ref) => act(id, { type: "recordReceipt", ref }),
     sendChase: (id, message) => act(id, { type: "sendChase", message }),
@@ -147,5 +128,25 @@ export const firebaseRepository: Repository = {
     reject: (id, reason) => act(id, { type: "reject", reason }),
     raiseException: (id, reason) => act(id, { type: "raiseException", reason }),
     downloadForms: (filingId) => postForForms(`/api/forms/filing/${encodeURIComponent(filingId)}`),
+
+    async staff() {
+      const snap = await getDocs(query(collection(fbDb(), COL.staff), where("active", "==", true)));
+      return snap.docs.map((d) => ({ ...(d.data() as StaffMember), id: d.id })).sort((a, b) => a.name.localeCompare(b.name));
+    },
+    async registrars() {
+      const snap = await getDocs(collection(fbDb(), COL.registrars));
+      return withDefaults(snap.docs.map((d) => ({ ...(d.data() as RegistrarProfile), id: d.id })));
+    },
+    saveRegistrar: (p) => api<RegistrarProfile>("/api/admin/registrars", p),
+    async settings() {
+      const d = await getDoc(doc(fbDb(), COL.config, SETTINGS_DOC));
+      return mergeSettings(d.exists() ? (d.data() as Settings) : null);
+    },
+    saveSettings: (next) => api<Settings>("/api/admin/settings", next),
+    async audit() {
+      const snap = await getDocs(query(collection(fbDb(), COL.audit), orderBy("at", "desc"), limit(1000)));
+      return snap.docs.map((d) => d.data() as AuditEntry);
+    },
+    setRole: (input) => api<StaffMember | null>("/api/admin/team", input),
   },
 };

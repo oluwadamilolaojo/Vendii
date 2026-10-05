@@ -32,7 +32,7 @@ export function holdingsFromClaims(claims: Claim[]): { holdings: Holding[]; unma
 }
 
 /** The filler's report travels in a response header next to the PDF. */
-export const REPORT_HEADER = "x-dividendi-forms";
+export const REPORT_HEADER = "x-vendii-forms";
 export interface FormsReport {
   forms: { registrarId: string; registrar: string; ticked: string[]; unlisted: string[]; warnings: { message: string }[] }[];
   unmapped?: string[];

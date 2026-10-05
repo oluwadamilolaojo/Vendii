@@ -1,36 +1,47 @@
+import "@/lib/storageMigration";
 import { readMockSession } from "@/lib/auth/mock";
-import { applyAction, fileOne, type ClaimAction } from "@/lib/domain/actions";
+import { readMockStaff, setMockRole } from "@/lib/auth/mockStaff";
+import { applyAction, fileWithClock, type ClaimAction, type OpsAction } from "@/lib/domain/actions";
+import { auditEntry, claimAudit } from "@/lib/domain/audit";
+import { PermissionError, authorizeAction, requirePermission } from "@/lib/domain/authorize";
 import { isClosed } from "@/lib/domain/claimStatus";
 import { fullName } from "@/lib/domain/names";
+import { can, isStaff, type Permission } from "@/lib/domain/permissions";
+import { withDefaults } from "@/lib/domain/registrarDesk";
+import { mergeSettings, validateSettings } from "@/lib/domain/settings";
 import { buildForms } from "@/lib/forms/client";
 import { holdingsFromClaims, profileFromFiling } from "@/lib/forms/profile";
-import type { Claim, Filing, Session } from "@/lib/domain/types";
+import type { Actor, AuditEntry, Claim, Filing, RegistrarProfile, Session, Settings } from "@/lib/domain/types";
 import { delay, today, uid } from "@/lib/util";
-import type { Repository } from "./repository";
+import { buildOpsDemo } from "./opsDemo";
+import type { BulkResult, Repository } from "./repository";
 import { buildCandidates, buildSampleHistory } from "./seed";
 
-const KEY = "dividendi:v1:db";
+const KEY = "vendii:v1:db";
 
 interface MockDb {
   claims: Claim[];
   filings: (Filing & { ownerId: string })[];
+  audit: AuditEntry[];
+  registrars: RegistrarProfile[];
+  settings: Settings | null;
 }
 
+const empty = (): MockDb => ({ claims: [], filings: [], audit: [], registrars: [], settings: null });
+
 function read(): MockDb {
-  if (typeof window === "undefined") return { claims: [], filings: [] };
+  if (typeof window === "undefined") return empty();
   try {
     const raw = window.localStorage.getItem(KEY);
-    if (raw) {
-      const db = JSON.parse(raw) as Partial<MockDb>;
-      return { claims: db.claims ?? [], filings: db.filings ?? [] };
-    }
+    if (raw) return { ...empty(), ...(JSON.parse(raw) as Partial<MockDb>) };
   } catch {
     /* corrupt storage: start over */
   }
-  return { claims: [], filings: [] };
+  return empty();
 }
 
 function write(db: MockDb): void {
+  db.audit = db.audit.slice(0, 2000); // the browser isn't an archive
   try {
     window.localStorage.setItem(KEY, JSON.stringify(db));
   } catch {
@@ -46,28 +57,39 @@ function session(): Session {
   return s;
 }
 
-function requireOps(): Session {
-  const s = session();
-  if (s.role !== "ops") throw new Error("Only Dividendi staff can do that.");
-  return s;
+const actorOf = (s: Session): Actor => ({ id: s.userId, name: s.name ?? s.identifier, role: s.role });
+
+function staffActor(p: Permission): Actor {
+  const a = actorOf(session());
+  requirePermission(a, p);
+  return a;
 }
 
-/** Same permission split as the Firebase routes: owner actions need the owner, everything else needs ops. */
-async function act(id: string, action: ClaimAction, who: "owner" | "ops"): Promise<Claim> {
-  await delay(250);
-  const s = who === "ops" ? requireOps() : session();
-  const db = read();
+/** Same rules as the Firebase route: authorise, apply on the clock, write the audit line. */
+function runAction(db: MockDb, id: string, action: ClaimAction, actor: Actor, bulk = false): Claim {
   const i = db.claims.findIndex((c) => c.id === id);
   if (i < 0) throw new Error("That claim doesn't exist.");
-  if (who === "owner" && db.claims[i].ownerId !== s.userId) throw new Error("That claim isn't yours.");
-  db.claims[i] = applyAction(db.claims[i], action);
+  const before = db.claims[i];
+  authorizeAction(actor, before, action);
+  const now = new Date();
+  const after = applyAction(before, action, { actor, now, sla: mergeSettings(db.settings).sla, bulk });
+  db.claims[i] = after;
+  db.audit.unshift(claimAudit(action, before, after, actor, now));
+  return after;
+}
+
+async function act(id: string, action: ClaimAction): Promise<Claim> {
+  await delay(200);
+  const db = read();
+  const out = runAction(db, id, action, actorOf(session()));
   write(db);
-  return db.claims[i];
+  return out;
 }
 
 export const mockRepository: Repository & {
   resetDemo(): void;
   loadSampleHistory(): void;
+  loadOpsDemo(): void;
 } = {
   async searchRegisters(input) {
     session();
@@ -113,12 +135,14 @@ export const mockRepository: Repository & {
       if (cand.pocket !== "uftf" && !input.selectedIds.includes(cand.id)) continue;
       const duplicate = db.claims.some((c) => c.ownerId === s.userId && c.registerEntryId === cand.registerEntryId && !isClosed(c.status));
       if (duplicate) continue;
-      filed.push(fileOne({
+      filed.push(fileWithClock({
         ...cand, id: uid(), filingId, ownerId: s.userId, ownerName, status: "draft", events: [],
         ref: null, submittedOn: null, paidOn: null, chaseRequested: false, exceptionReason: null,
       }));
     }
     db.claims.push(...filed);
+    const who = actorOf(s);
+    for (const c of filed) db.audit.unshift(auditEntry(who, "claim.file", `Filed ${c.company} with ${c.registrar}`, { claimId: c.id, filingId }));
     write(db);
     return filed;
   },
@@ -131,12 +155,12 @@ export const mockRepository: Repository & {
   async getClaim(id) {
     const s = session();
     const c = read().claims.find((x) => x.id === id) ?? null;
-    if (c && c.ownerId !== s.userId && s.role !== "ops") return null;
+    if (c && c.ownerId !== s.userId && !isStaff(s.role)) return null;
     return c;
   },
 
-  requestChase: (id) => act(id, { type: "requestChase" }, "owner"),
-  resolveException: (id) => act(id, { type: "resolveException" }, "owner"),
+  requestChase: (id) => act(id, { type: "requestChase" }),
+  resolveException: (id) => act(id, { type: "resolveException" }),
 
   async uploadFile(kind, file) {
     await delay(200);
@@ -145,22 +169,41 @@ export const mockRepository: Repository & {
 
   ops: {
     async listAll() {
-      requireOps();
+      staffActor("queue.view");
       return read().claims;
     },
     async getFiling(filingId) {
-      requireOps();
-      return read().filings.find((f) => f.id === filingId) ?? null;
+      const a = staffActor("filings.view");
+      const db = read();
+      const f = db.filings.find((x) => x.id === filingId) ?? null;
+      if (f) {
+        db.audit.unshift(auditEntry(a, "filing.view", `Viewed ID documents for ${fullName(f.name)}`, { filingId }));
+        write(db);
+      }
+      return f;
     },
-    approve: (id) => act(id, { type: "approve" }, "ops"),
-    recordReceipt: (id, ref) => act(id, { type: "recordReceipt", ref }, "ops"),
-    sendChase: (id, message) => act(id, { type: "sendChase", message }, "ops"),
-    recordCollection: (id) => act(id, { type: "recordCollection" }, "ops"),
-    debitFee: (id) => act(id, { type: "debitFee" }, "ops"),
-    reject: (id, reason) => act(id, { type: "reject", reason }, "ops"),
-    raiseException: (id, reason) => act(id, { type: "raiseException", reason }, "ops"),
+    act: (id, action) => act(id, action),
+    async bulk(ids, action: OpsAction): Promise<BulkResult> {
+      await delay(250);
+      const db = read();
+      const actor = actorOf(session());
+      const out: BulkResult = { done: [], failed: [] };
+      for (const id of ids) {
+        try { out.done.push(runAction(db, id, action, actor, true)); }
+        catch (e) { out.failed.push({ id, error: e instanceof Error ? e.message : "Failed" }); }
+      }
+      write(db);
+      return out;
+    },
+    approve: (id) => act(id, { type: "approve" }),
+    recordReceipt: (id, ref) => act(id, { type: "recordReceipt", ref }),
+    sendChase: (id, message) => act(id, { type: "sendChase", message }),
+    recordCollection: (id) => act(id, { type: "recordCollection" }),
+    debitFee: (id) => act(id, { type: "debitFee" }),
+    reject: (id, reason) => act(id, { type: "reject", reason }),
+    raiseException: (id, reason) => act(id, { type: "raiseException", reason }),
     async downloadForms(filingId) {
-      requireOps();
+      const a = staffActor("filings.view");
       const db = read();
       const filing = db.filings.find((f) => f.id === filingId);
       if (!filing) throw new Error("That filing doesn't exist.");
@@ -169,12 +212,70 @@ export const mockRepository: Repository & {
       const photo = filing.administrator?.photoUrl ?? filing.photoUrl;
       const result = await buildForms({ profile: profileFromFiling(filing), holdings, photo: photo?.startsWith("data:") ? photo : null, signature: filing.signatureUrl?.startsWith("data:") ? filing.signatureUrl : null });
       if (result.report) result.report.unmapped = unmapped.map((c) => `${c.company} (${c.registrar})`);
+      db.audit.unshift(auditEntry(a, "forms.generate", `Generated registrar forms for ${fullName(filing.name)}`, { filingId }));
+      write(db);
       return result;
+    },
+    async staff() {
+      staffActor("queue.view");
+      return readMockStaff().filter((m) => m.active);
+    },
+    async registrars() {
+      staffActor("queue.view");
+      return withDefaults(read().registrars);
+    },
+    async saveRegistrar(p) {
+      const a = staffActor("registrars.edit");
+      const db = read();
+      const saved: RegistrarProfile = { ...p, updatedAt: new Date().toISOString(), updatedBy: a.name };
+      db.registrars = [...db.registrars.filter((r) => r.id !== p.id), saved];
+      db.audit.unshift(auditEntry(a, "registrar.update", `Updated ${p.name}: contacts, requirements or notes`, { registrarId: p.id }));
+      write(db);
+      return saved;
+    },
+    async settings() {
+      staffActor("queue.view");
+      return mergeSettings(read().settings);
+    },
+    async saveSettings(input) {
+      const a = staffActor("settings.edit");
+      const next = validateSettings(input);
+      const db = read();
+      db.settings = next;
+      db.audit.unshift(auditEntry(a, "settings.update", `Changed SLA policy: ${Object.entries(next.sla).map(([k, v]) => `${k} ${v}`).join(", ")}`));
+      write(db);
+      return next;
+    },
+    async audit() {
+      staffActor("audit.view");
+      return read().audit;
+    },
+    async setRole({ identifier, name, role }) {
+      const a = staffActor("team.manage");
+      const target = identifier.trim();
+      if (!target) throw new Error("Enter the email or phone number they sign in with.");
+      const me = session();
+      if (target.toLowerCase() === me.identifier.toLowerCase()) throw new PermissionError("You can't change your own role. Ask another admin.");
+      const m = setMockRole(target, name, role);
+      const db = read();
+      db.audit.unshift(auditEntry(a, "team.setRole", role ? `Gave ${m?.name ?? target} the ${role} role` : `Removed staff access for ${m?.name ?? target}`));
+      write(db);
+      return m;
     },
   },
 
   resetDemo() {
     window.localStorage.removeItem(KEY);
+  },
+
+  /** Claims across many registrars in every state, for trying the admin portal. Replaces earlier demo claims. */
+  loadOpsDemo() {
+    const db = read();
+    const demo = buildOpsDemo();
+    db.claims = db.claims.filter((c) => !c.id.startsWith("demo-")).concat(demo.claims);
+    db.filings = db.filings.filter((f) => !f.id.startsWith("demo-")).concat(demo.filings);
+    db.audit = demo.audit.concat(db.audit.filter((e) => !e.claimId?.startsWith("demo-")));
+    write(db);
   },
 
   loadSampleHistory() {
