@@ -1,0 +1,34 @@
+rules_version = '2';
+
+// Each shareholder uploads into their own folder and can read it back. Staff read
+// everything for pack review. Nobody can overwrite or delete: a filed document stays
+// exactly as it was when the authority was signed.
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isOps() { return request.auth != null && request.auth.token.role == 'ops'; }
+    function isOwner(uid) { return request.auth != null && request.auth.uid == uid; }
+    function isNew() { return resource == null; }
+    function isImage() { return request.resource.contentType.matches('image/.*'); }
+    function isImageOrPdf() { return isImage() || request.resource.contentType == 'application/pdf'; }
+
+    match /identity-photos/{uid}/{file} {
+      allow read: if isOwner(uid) || isOps();
+      allow create: if isOwner(uid) && isNew() && isImage() && request.resource.size < 5 * 1024 * 1024;
+    }
+
+    match /signatures/{uid}/{file} {
+      allow read: if isOwner(uid) || isOps();
+      allow create: if isOwner(uid) && isNew() && request.resource.contentType == 'image/png'
+                    && request.resource.size < 1 * 1024 * 1024;
+    }
+
+    match /estate-documents/{uid}/{file} {
+      allow read: if isOwner(uid) || isOps();
+      allow create: if isOwner(uid) && isNew() && isImageOrPdf() && request.resource.size < 10 * 1024 * 1024;
+    }
+
+    match /{all=**} {
+      allow read, write: if false;
+    }
+  }
+}
