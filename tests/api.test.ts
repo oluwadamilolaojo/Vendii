@@ -7,7 +7,9 @@ let db = new FakeDb();
 const TOKENS: Record<string, { uid: string; role?: string }> = {
   "t-ade": { uid: "ade" },
   "t-eve": { uid: "eve" },
-  "t-ops": { uid: "staff", role: "ops" },
+  "t-ops": { uid: "staff", role: "ops" }, // legacy role, read as admin
+  "t-agent": { uid: "agent1", role: "agent" },
+  "t-fin": { uid: "fin1", role: "finance" },
 };
 
 vi.mock("@/lib/firebase/admin", () => ({
@@ -100,13 +102,17 @@ describe("Firebase API routes", () => {
     expect(early.status).toBe(400);
     expect(db.all("feeDebits")).toHaveLength(0);
 
-    await call(act, "t-ops", { type: "recordCollection" }, { id: zen.id });
-    const paid = await call(act, "t-ops", { type: "debitFee" }, { id: zen.id });
+    await call(act, "t-fin", { type: "recordCollection" }, { id: zen.id });
+    // Whoever approved can't take the fee, even as admin.
+    const self = await call(act, "t-ops", { type: "debitFee" }, { id: zen.id });
+    expect(self.status).toBe(403);
+    expect(self.body.error).toMatch(/someone else/);
+    const paid = await call(act, "t-fin", { type: "debitFee" }, { id: zen.id });
     expect(paid.body.status).toBe("paid");
-    expect(db.all("feeDebits")).toEqual([expect.objectContaining({ id: zen.id, fee: 48625, net: 437625 })]);
+    expect(db.all("feeDebits")).toEqual([expect.objectContaining({ id: zen.id, claimId: zen.id, amount: 48625, gross: 486250, status: "collected" })]);
 
     // A second debit is impossible.
-    expect((await call(act, "t-ops", { type: "debitFee" }, { id: zen.id })).status).toBeGreaterThanOrEqual(400);
+    expect((await call(act, "t-fin", { type: "debitFee" }, { id: zen.id })).status).toBeGreaterThanOrEqual(400);
     expect(db.all("feeDebits")).toHaveLength(1);
   });
 
@@ -152,5 +158,55 @@ describe("Firebase API routes", () => {
     expect((await call(act, "t-ops", { type: "markPaid" }, { id: zen.id })).status).toBe(400);
     expect((await call(act, "t-ops", { type: "reject", reason: "" }, { id: zen.id })).status).toBe(400);
     expect((await call(act, "t-ops", { type: "reject", reason: "Transferred out in 2019." }, { id: zen.id })).body.status).toBe("rejected");
+  });
+
+  it("refuses actions a role doesn't have, and writes an audit line for those it allows", async () => {
+    const [zen] = (await call(file, "t-ade", filing("ade", ["zen"]))).body;
+    const byAgent = await call(act, "t-agent", { type: "approve" }, { id: zen.id });
+    expect(byAgent.status).toBe(403);
+    const byFinance = await call(act, "t-fin", { type: "reject", reason: "x" }, { id: zen.id });
+    expect(byFinance.status).toBe(403);
+    expect((await call(act, "t-ops", { type: "approve" }, { id: zen.id })).status).toBe(200);
+    const audit = db.all("auditLog");
+    expect(audit.map((a: any) => a.action)).toEqual(expect.arrayContaining(["claim.file", "claim.approve"]));
+    expect(audit.find((a: any) => a.action === "claim.approve")).toMatchObject({ actorId: "staff", actorRole: "admin", from: "review", to: "submitted" });
+    expect(audit.some((a: any) => a.actorId === "agent1")).toBe(false);
+  });
+
+  it("puts filed claims on the SLA clock", async () => {
+    const [zen] = (await call(file, "t-ade", filing("ade", ["zen"]))).body;
+    expect(zen.stateSince).toBeTruthy();
+    expect(new Date(zen.dueAt).getTime()).toBeGreaterThan(new Date(zen.stateSince).getTime());
+  });
+
+  it("lets agents take unassigned work but not hand it to others", async () => {
+    const [zen] = (await call(file, "t-ade", filing("ade", ["zen"]))).body;
+    expect((await call(act, "t-agent", { type: "assign", assignee: { id: "fin1", name: "Chidi" } }, { id: zen.id })).status).toBe(403);
+    const mine = await call(act, "t-agent", { type: "assign", assignee: { id: "agent1", name: "Tobi" } }, { id: zen.id });
+    expect(mine.body).toMatchObject({ assigneeId: "agent1", assigneeName: "Tobi" });
+    expect((await call(act, "t-ops", { type: "assign", assignee: { id: "fin1", name: "Chidi" } }, { id: zen.id })).body.assigneeId).toBe("fin1");
+  });
+});
+
+describe("bulk actions", () => {
+  beforeEach(() => { db = new FakeDb(); seed(); });
+
+  it("approves many at once and reports the ones that couldn't move", async () => {
+    const { POST: bulk } = await import("@/app/api/claims/bulk/route");
+    const claims = (await call(file, "t-ade", filing("ade", ["zen", "uba", "cad"]))).body;
+    const ids = claims.map((c: any) => c.id);
+    const r = await call(bulk, "t-ops", { ids, action: { type: "approve" } });
+    expect(r.status).toBe(200);
+    // zen is an exact match; uba matched on a variant spelling, so it must be opened on its own;
+    // cad is on hold and can't be approved at all.
+    expect(r.body.done.map((c: any) => c.registerEntryId)).toEqual(["zen"]);
+    expect(r.body.failed).toHaveLength(2);
+    expect(r.body.failed.map((f: any) => f.error).join(" ")).toMatch(/Medium-confidence match: open it/);
+    expect(r.body.failed.map((f: any) => f.error).join(" ")).toMatch(/can't move/);
+    // The same claim approves fine one at a time.
+    const uba = claims.find((c: any) => c.registerEntryId === "uba");
+    expect((await call(act, "t-ops", { type: "approve" }, { id: uba.id })).status).toBe(200);
+    expect((await call(bulk, "t-agent", { ids, action: { type: "approve" } })).body.failed).toHaveLength(3);
+    expect((await call(bulk, "t-ade", { ids, action: { type: "approve" } })).status).toBe(403);
   });
 });

@@ -4,7 +4,10 @@ import { COL, claimFromData, type FilingDoc } from "@/lib/data/firestoreShape";
 import { fillForms } from "@/lib/forms/fill";
 import { REPORT_HEADER, encodeReport, holdingsFromClaims, profileFromFiling } from "@/lib/forms/profile";
 import type { Filing } from "@/lib/domain/types";
-import { HttpError, caller, requireOps } from "@/lib/server/http";
+import { auditEntry } from "@/lib/domain/audit";
+import { fullName } from "@/lib/domain/names";
+import { writeAudit } from "@/lib/server/audit";
+import { HttpError, actorOf, caller, requireStaff } from "@/lib/server/http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,7 +25,8 @@ async function download(path: string | null | undefined): Promise<Uint8Array | n
 /** Staff only. Builds every registrar form for one filing, straight from what was filed. */
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   try {
-    requireOps(await caller(req));
+    const who = await caller(req);
+    requireStaff(who, "filings.view");
     const db = adminDb();
     const snap = await db.collection(COL.filings).doc(params.id).get();
     if (!snap.exists) throw new HttpError(404, "That filing doesn't exist.");
@@ -41,6 +45,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const photo = await download(d.administrator?.photoPath ?? d.photoPath);
     const signature = await download(d.poa?.signaturePath);
     const { pdf, forms } = await fillForms(profileFromFiling(filing), holdings, { photo, signature });
+    await writeAudit(db, auditEntry(actorOf(who), "forms.generate", `Generated registrar forms for ${fullName(d.name)}`, { filingId: snap.id }));
     return new NextResponse(Buffer.from(pdf), {
       headers: {
         "content-type": "application/pdf",

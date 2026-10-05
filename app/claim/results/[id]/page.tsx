@@ -52,7 +52,7 @@ export default function CandidateDetail({ params }: { params: { id: string } }) 
           <h2>If it&apos;s paid in full</h2>
           <div className="ledger card" style={{ padding: "4px 18px" }}>
             <div className="row"><span className="k">Paid by {c.registrar}</span><span className="v">{naira(c.amount)}</span></div>
-            <div className="row"><span className="k">Dividendi fee, 10%, debited after payment</span><span className="v">{naira(feeFor(c.amount))}</span></div>
+            <div className="row"><span className="k">Vendii fee, 10%, debited after payment</span><span className="v">{naira(feeFor(c.amount))}</span></div>
             <div className="row total"><span>You keep</span><span>{naira(netFor(c.amount))}</span></div>
           </div>
         </>

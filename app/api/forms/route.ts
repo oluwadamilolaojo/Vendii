@@ -39,7 +39,7 @@ export async function POST(req: Request) {
     return new NextResponse(Buffer.from(pdf), {
       headers: {
         "content-type": "application/pdf",
-        "content-disposition": `attachment; filename="dividendi-mandates-${profile.surname.replace(/[^\w-]/g, "") || "forms"}.pdf"`,
+        "content-disposition": `attachment; filename="vendii-mandates-${profile.surname.replace(/[^\w-]/g, "") || "forms"}.pdf"`,
         [REPORT_HEADER]: encodeReport({ forms }),
         "access-control-expose-headers": REPORT_HEADER,
       },

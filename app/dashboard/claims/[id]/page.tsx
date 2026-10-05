@@ -85,7 +85,7 @@ export default function ClaimDetail({ params }: { params: { id: string } }) {
           <div className="card ledger">
             <h3>{c.status === "paid" ? "What you received" : "If paid as estimated"}</h3>
             <div className="row"><span className="k">Paid by registrar</span><span className="v">{naira(c.amount)}</span></div>
-            <div className="row"><span className="k">Dividendi fee, 10%</span><span className="v">{c.status === "rejected" ? naira(0) : naira(feeFor(c.amount))}</span></div>
+            <div className="row"><span className="k">Vendii fee, 10%</span><span className="v">{c.status === "rejected" ? naira(0) : naira(feeFor(c.amount))}</span></div>
             <div className="row total"><span>You keep</span><span>{c.status === "rejected" ? naira(0) : naira(netFor(c.amount))}</span></div>
           </div>
           <div className="card ledger">

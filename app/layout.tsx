@@ -5,9 +5,8 @@ import "./globals.css";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: "Dividendi | Recover your unclaimed dividends",
+  title: "Vendii | Recover your unclaimed dividends",
   description: "We search every Nigerian registrar for dividends owed to you, file the claim, and chase it until you're paid. 10% of what arrives, nothing if nothing does.",
-  icons: { icon: "/logo-mark.png" },
 };
 
 export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#122135" };

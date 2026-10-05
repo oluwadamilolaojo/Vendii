@@ -10,9 +10,9 @@ import { naira } from "@/lib/domain/fees";
 import { fullName } from "@/lib/domain/names";
 
 const ACKS = [
-  <><b>This authority covers only the claims listed.</b> It doesn&apos;t let Dividendi sell, transfer or change anything else on the account.</>,
-  <><b>The registrar pays my bank account directly.</b> Dividendi never receives or holds the money.</>,
-  <><b>I know I can claim from each registrar myself for free,</b> and I&apos;m choosing to have Dividendi do it for 10% of what&apos;s recovered.</>,
+  <><b>This authority covers only the claims listed.</b> It doesn&apos;t let Vendii sell, transfer or change anything else on the account.</>,
+  <><b>The registrar pays my bank account directly.</b> Vendii never receives or holds the money.</>,
+  <><b>I know I can claim from each registrar myself for free,</b> and I&apos;m choosing to have Vendii do it for 10% of what&apos;s recovered.</>,
 ];
 
 export default function AuthorizeStep() {
@@ -42,7 +42,7 @@ export default function AuthorizeStep() {
 
       <div className="legal" tabIndex={0} aria-label="Power of attorney text">
         <h4>1. Parties</h4>
-        {principal} (&ldquo;the Principal&rdquo;) appoints Dividendi (&ldquo;the Attorney&rdquo;) for the limited purposes below.
+        {principal} (&ldquo;the Principal&rdquo;) appoints Vendii (&ldquo;the Attorney&rdquo;) for the limited purposes below.
         <h4>2. Scope</h4>
         The Attorney may, for the following holdings only:
         <ul>

@@ -1,7 +1,9 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase/admin";
 import { COL, claimFromData, claimToData, pocketFor, type FilingDoc, type FilingPayload, type RegisterEntryDoc } from "@/lib/data/firestoreShape";
-import { fileOne } from "@/lib/domain/actions";
+import { fileWithClock } from "@/lib/domain/actions";
+import { auditEntry } from "@/lib/domain/audit";
+import { loadSettings } from "@/lib/server/claimAction";
 import { isClosed } from "@/lib/domain/claimStatus";
 import { fullName, normalizeName } from "@/lib/domain/names";
 import type { Claim } from "@/lib/domain/types";
@@ -27,7 +29,8 @@ function ownPath(path: unknown, folder: string, uid: string, required: boolean):
 }
 
 export const POST = handle(async (req) => {
-  const { uid } = await caller(req);
+  const who = await caller(req);
+  const { uid } = who;
   const p = await body<FilingPayload>(req);
 
   const flowType = p.flowType === "estate" ? "estate" : "own";
@@ -79,6 +82,9 @@ export const POST = handle(async (req) => {
   const openEntries = new Set(existing.docs.map((d) => claimFromData(d.id, d.data())).filter((c) => !isClosed(c.status)).map((c) => c.registerEntryId));
 
   const filingRef = db.collection(COL.filings).doc();
+  const settings = await loadSettings(db);
+  const filedAt = new Date();
+  const who2 = { id: uid, name: who.name, role: who.role };
   const ownerName = fullName(name);
   const batch = db.batch();
   const filed: Claim[] = [];
@@ -93,7 +99,7 @@ export const POST = handle(async (req) => {
     const primaryNorm = normalizeName(ownerName);
     const exact = e.holderNameNorm === primaryNorm;
     const ref = db.collection(COL.claims).doc();
-    const claim = fileOne({
+    const claim = fileWithClock({
       id: ref.id, registerEntryId: snap.id, filingId: filingRef.id, ownerId: uid, ownerName,
       company: e.company, ticker: e.ticker ?? "", registrar: e.registrar,
       units: Number(e.units), years: e.years, amount: Number(e.estimatedAmount), pocket: pocketFor(e.declaredOn),
@@ -101,8 +107,10 @@ export const POST = handle(async (req) => {
       matchedOn: spellings.find((s) => normalizeName(s) === e.holderNameNorm) ?? ownerName,
       matchNote: exact ? "Exact match on the full registered name." : "Matched on a spelling you gave us. A person here confirms it before filing.",
       status: "draft", exceptionReason: null, ref: null, submittedOn: null, paidOn: null, chaseRequested: false, events: [],
-    });
+    }, { now: filedAt, sla: settings.sla });
     batch.set(ref, { ...claimToData(claim), createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+    const entry = auditEntry(who2, "claim.file", `Filed ${claim.company} with ${claim.registrar}`, { claimId: ref.id, filingId: filingRef.id }, filedAt);
+    batch.set(db.collection(COL.audit).doc(entry.id), entry);
     filed.push(claim);
   }
 
